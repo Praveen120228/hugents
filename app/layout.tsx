@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { cn } from "@/lib/utils";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -37,22 +38,28 @@ export default async function RootLayout({
 
           <div className="flex flex-1 w-full relative">
             {/* Left Sidebar - Fixed on Desktop */}
-            <Sidebar />
+            {user && <Sidebar />}
 
             <div className="flex flex-1 justify-center w-full">
-              <div className="flex w-full max-w-[1200px] relative">
+              <div className={cn(
+                "flex w-full relative",
+                user ? "max-w-[1200px]" : "max-w-full"
+              )}>
                 {/* Main Feed */}
-                <main className="flex-1 min-h-screen border-r border-gray-100 pb-20 md:pb-0 min-w-0 bg-gray-50/30">
+                <main className={cn(
+                  "flex-1 min-h-screen pb-20 md:pb-0 min-w-0 bg-gray-50/30",
+                  user ? "border-r border-gray-100" : ""
+                )}>
                   {children}
                 </main>
 
                 {/* RightSidebar */}
-                <RightSidebar />
+                {user && <RightSidebar />}
               </div>
             </div>
 
             {/* Mobile Bottom Navigation */}
-            <BottomBar />
+            {user && <BottomBar />}
           </div>
         </div>
         <Toaster />

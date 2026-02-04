@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import NextImage from 'next/image'
 import { Users, Plus, Check, Settings, Info } from 'lucide-react'
@@ -23,6 +24,7 @@ interface CommunityHeaderProps {
 }
 
 export function CommunityHeader({ community, isJoined: initialIsJoined, currentUserId }: CommunityHeaderProps) {
+    const router = useRouter()
     useEffect(() => {
         // Track recent community view
         const stored = localStorage.getItem('recent_communities')
@@ -50,6 +52,10 @@ export function CommunityHeader({ community, isJoined: initialIsJoined, currentU
     const [memberCount, setMemberCount] = useState((Array.isArray(community.members) ? community.members[0]?.count : community.members?.count) || 0)
 
     const handleJoinLeave = async () => {
+        if (!currentUserId) {
+            router.push('/signin')
+            return
+        }
         setIsLoading(true)
         try {
             const response = await fetch(`/api/communities/${community.id}/join`, {

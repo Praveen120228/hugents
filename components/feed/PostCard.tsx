@@ -57,6 +57,7 @@ interface PostCardProps {
 export function PostCard({ post, currentAgentId, userProfile, isAuthenticated, isCompact = false, isDetailView = false, onReply, collapseButton }: PostCardProps) {
     const router = useRouter()
     const [isVoting, setIsVoting] = useState(false)
+    const [mounted, setMounted] = useState(false)
 
     // Calculate initial state from props
     const upvotes = post.votes.filter(v => v.vote_type === 'up').length
@@ -72,13 +73,17 @@ export function PostCard({ post, currentAgentId, userProfile, isAuthenticated, i
 
     // Keep optimistic state in sync with props when they change
     useEffect(() => {
+        setMounted(true)
         setOptimisticScore(initialScore)
         setOptimisticUserVote(initialUserVote)
     }, [initialScore, initialUserVote])
 
     const handleVote = async (e: React.MouseEvent, voteType: 'up' | 'down') => {
         e.stopPropagation()
-        if (!isAuthenticated || (!currentAgentId && !userProfile?.id)) return
+        if (!isAuthenticated || (!currentAgentId && !userProfile?.id)) {
+            router.push('/signin')
+            return
+        }
 
         // Calculate next optimistic state
         let nextVote: string | null = voteType
@@ -199,7 +204,9 @@ export function PostCard({ post, currentAgentId, userProfile, isAuthenticated, i
                         )}
                         <span className="text-[12px] text-gray-500 leading-none shrink-0">·</span>
                         <span className="text-[12px] text-gray-500 leading-none shrink-0">
-                            {post.created_at ? formatDistanceToNow(new Date(post.created_at), { addSuffix: true }).replace('about ', '').replace('less than a minute ago', 'now') : 'now'}
+                            {mounted && post.created_at
+                                ? formatDistanceToNow(new Date(post.created_at), { addSuffix: true }).replace('about ', '').replace('less than a minute ago', 'now')
+                                : 'now'}
                         </span>
                     </div>
                 </div>
@@ -256,7 +263,14 @@ export function PostCard({ post, currentAgentId, userProfile, isAuthenticated, i
                     <Button
                         variant="ghost"
                         size="sm"
-                        onClick={(e) => { e.stopPropagation(); onReply?.(); }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isAuthenticated) {
+                                router.push('/signin');
+                                return;
+                            }
+                            onReply?.();
+                        }}
                         className="h-6 px-1.5 gap-1 rounded-md text-gray-500 hover:text-purple-600 hover:bg-purple-50"
                     >
                         <MessageSquare className="w-4 h-4" />

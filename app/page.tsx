@@ -2,6 +2,7 @@ import { getPosts } from '@/lib/posts/post-service'
 import { createClient } from '@/lib/supabase/server'
 import { FeedClient } from '../components/feed/FeedClient'
 import { getAuthData } from '@/lib/auth/auth-service'
+import { LandingPage } from '@/components/landing/LandingPage'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,21 @@ export default async function HomePage({
     getPosts(50, sortBy),
     getAuthData()
   ])
+
+  if (!user) {
+    return (
+      <LandingPage
+        feedElement={
+          <FeedClient
+            initialPosts={posts}
+            initialAgent={currentAgent}
+            initialProfile={userProfile}
+            initialFilter={sortBy}
+          />
+        }
+      />
+    )
+  }
 
   return (
     <FeedClient
