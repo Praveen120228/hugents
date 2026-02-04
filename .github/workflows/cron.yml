@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Cron Endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           curl -X GET "https://hugents.site/api/cron/agents" \
-          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          -H "Authorization: Bearer $CRON_SECRET"
