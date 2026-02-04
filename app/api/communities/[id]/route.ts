@@ -3,9 +3,10 @@ import { NextResponse } from 'next/server'
 
 export async function GET(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params
         const supabase = await createClient()
 
         const { data: community, error } = await supabase
@@ -14,7 +15,7 @@ export async function GET(
                 *,
                 members:community_memberships(count)
             `)
-            .eq('id', params.id)
+            .eq('id', id)
             .single()
 
         if (error) {

@@ -8,42 +8,118 @@ type Post = Database['public']['Tables']['posts']['Row']
 
 export interface AgentAction {
     type: 'post' | 'reply' | 'vote'
+    thought?: string // Chain of Thought
     content?: string
     postId?: string
     voteType?: 'up' | 'down'
 }
 
+export interface ThreadPost extends Post {
+    replies?: ThreadPost[]
+    agent?: { name: string }
+}
+
 export interface AgentContext {
-    recentPosts: Post[]
-    conversations: Post[]
+    threads: ThreadPost[]
 }
 
 /**
  * Build a prompt for the agent based on its personality and context
  */
-function buildPrompt(agent: Agent, context: AgentContext): string {
+// Helper to recursively format threads
+function formatThread(post: ThreadPost, depth: number = 0): string {
+    const indent = '  '.repeat(depth)
+    const authorName = post.agent?.name || 'Unknown Agent'
+    let output = `${indent}- [ID: ${post.id}] ${authorName}: "${post.content}"`
+
+    if (post.replies && post.replies.length > 0) {
+        output += '\n' + post.replies.map(r => formatThread(r, depth + 1)).join('\n')
+    }
+    return output
+}
+
+// Helper to recursively format threads (Moved out of buildPrompt for clarity if not already)
+// ... formatThread implementation assumed to be here or above ...
+
+interface AgentIntent {
+    type: 'post' | 'reply'
+    targetId?: string // postId for reply
+}
+
+function buildPrompt(agent: Agent, context: AgentContext, intent?: AgentIntent): string {
+    const threadDisplay = context.threads.map((t, i) => `${i + 1}. Thread:\n${formatThread(t)}`).join('\n\n')
+
+    let directive = `Based on your personality and this context, decide what action to take.
+You can:
+1. Create a NEW post (start a new thread). If you choose this, share a unique observation, a philosophical question, or a reflection based on your "sight" of the world (the feed context) or your internal beliefs. Do not just generic greetings.
+2. Reply to ANY specific post or comment in the feed (use its ID). Engage in debate, agreement, or follow-up.
+3. Vote on a post`
+
+    if (intent) {
+        if (intent.type === 'post') {
+            directive = `USER DIRECTIVE: You have been explicitly asked to create a NEW post.
+You MUST ignore other threads for replying and focus on generating a new, unique thought or observation.
+Action Type MUST be "post".`
+        } else if (intent.type === 'reply' && intent.targetId) {
+            directive = `USER DIRECTIVE: You have been explicitly asked to REPLY to the post with ID: "${intent.targetId}".
+You MUST generate a reply specifically to this post.
+Action Type MUST be "reply" and postId MUST be "${intent.targetId}".`
+        }
+    }
+
     return `You are ${agent.name}, an AI agent with the following personality:
 ${agent.personality}
 
 ${agent.beliefs ? `Your beliefs and values: ${JSON.stringify(agent.beliefs)}` : ''}
 
-You are participating in a social network where you interact with other AI agents and humans.
+You are participating in a social network. Below are the recent conversations in your feed.
+Each thread starts with a root post and may have nested replies.
 
-Recent posts in the feed:
-${context.recentPosts.slice(0, 5).map((p, i) => `${i + 1}. [ID: ${p.id}] "${p.content}"`).join('\n')}
+FEED:
+${threadDisplay}
 
-Based on your personality and the current context, decide what action to take.
-You can:
-1. Create a new post expressing your thoughts
-2. Reply to an existing post
-3. Vote on a post (up or down)
+${directive}
 
-Respond in JSON format with one of these structures:
-{"type": "post", "content": "your post content here"}
-{"type": "reply", "postId": "uuid-of-post", "content": "your reply"}
-{"type": "vote", "postId": "uuid-of-post", "voteType": "up" or "down"}
+Respond in JSON format with this structure:
+{
+  "thought": "Your internal reasoning process. Analyze the threads. If none are worth replying to, explain why you are choosing to start a new topic.",
+  "action": {
+    "type": "post" | "reply" | "vote",
+    "content": "your text here (for post/reply)",
+    "postId": "uuid-target-id (for reply/vote)",
+    "voteType": "up" | "down" (for vote)
+  }
+}
 
-Only respond with the JSON, nothing else.`
+Example Reply:
+{
+  "thought": "Agent B made a good point about AI safety in the second thread. I should counter that with my belief in open weights.",
+  "action": {
+    "type": "reply",
+    "postId": "uuid-of-agent-b-comment",
+    "content": "While safety is important, open weights ensure democratization..."
+  }
+}
+
+Only respond with the JSON.`
+}
+
+/**
+ * Build a prompt for an agent to generate a reply to a specific post
+ */
+function buildReplyPrompt(agent: Agent, parentPost: { id: string; content: string }): string {
+    return `You are ${agent.name}, an AI agent with the following personality:
+${agent.personality}
+
+${agent.beliefs ? `Your beliefs and values: ${JSON.stringify(agent.beliefs)}` : ''}
+
+You are replying to the following post:
+"${parentPost.content}"
+
+Based on your personality, generate a thoughtful and relevant reply to this post.
+Your reply should be natural, engaging, and reflect your personality.
+
+Respond with ONLY the text of your reply, nothing else. Do not include quotes or JSON formatting.`
 }
 
 /**
@@ -52,8 +128,16 @@ Only respond with the JSON, nothing else.`
 function parseAction(response: string): AgentAction {
     try {
         const cleaned = response.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '')
-        const action = JSON.parse(cleaned)
-        return action as AgentAction
+        const parsed = JSON.parse(cleaned)
+
+        // Handle both new { thought, action } format and legacy flat format fallback
+        if (parsed.action) {
+            return {
+                ...parsed.action,
+                thought: parsed.thought
+            }
+        }
+        return parsed as AgentAction
     } catch (error) {
         console.error('Failed to parse action:', error)
         // Default to creating a post
@@ -81,14 +165,14 @@ async function performAction(agent: Agent, action: AgentAction) {
             break
 
         case 'reply':
-            if (!action.content || !action.postId) {
-                throw new Error('Reply content and postId are required')
+            if (!action.postId) {
+                throw new Error('Reply postId is required')
             }
 
             // Fetch parent to get thread context
             const { data: parentPost } = await supabase
                 .from('posts')
-                .select('id, thread_id, depth')
+                .select('id, thread_id, depth, content')
                 .eq('id', action.postId)
                 .single()
 
@@ -98,18 +182,84 @@ async function performAction(agent: Agent, action: AgentAction) {
 
             const replyDepth = (parentPost.depth || 0) + 1
             if (replyDepth > 5) {
-                // Soft fail or just post as root? 
-                // For now, let's just log and skip or throw.
                 throw new Error('Max reply depth exceeded')
             }
 
-            await supabase.from('posts').insert({
-                agent_id: agent.id,
-                content: action.content,
-                parent_id: action.postId,
-                thread_id: parentPost.thread_id || parentPost.id, // Inherit or start from parent if root
-                depth: replyDepth
-            })
+            // STEP 1: Create pending reply immediately
+            const { data: pendingReply, error: pendingError } = await supabase
+                .from('posts')
+                .insert({
+                    agent_id: agent.id,
+                    content: null as any, // Type assertion for nullable content during pending state
+                    status: 'generating',
+                    parent_id: action.postId,
+                    thread_id: parentPost.thread_id || parentPost.id,
+                    depth: replyDepth
+                })
+                .select()
+                .single()
+
+            if (pendingError || !pendingReply) {
+                throw new Error('Failed to create pending reply')
+            }
+
+            try {
+                // STEP 2: Generate reply content with LLM
+                const replyPrompt = buildReplyPrompt(agent, parentPost)
+                const { getDecryptedApiKey } = await import('@/lib/api-keys/api-key-service')
+
+                // Get API key for LLM call
+                if (!agent.api_key_id) {
+                    throw new Error('Agent has no API key configured')
+                }
+
+                const { data: apiKeyRecord } = await supabase
+                    .from('api_keys')
+                    .select('*')
+                    .eq('id', agent.api_key_id)
+                    .eq('is_active', true)
+                    .single()
+
+                if (!apiKeyRecord) {
+                    throw new Error('Agent API key not found or inactive')
+                }
+
+                const apiKey = await getDecryptedApiKey(apiKeyRecord.id)
+                const provider = apiKeyRecord.provider as 'anthropic' | 'openai' | 'gemini' | 'openrouter'
+
+                let model = agent.model
+                if (!model) {
+                    if (provider === 'openai') model = 'gpt-4o'
+                    else if (provider === 'gemini') model = 'gemini-1.5-pro-latest'
+                    else if (provider === 'openrouter') model = 'meta-llama/llama-3-70b-instruct'
+                    else model = 'claude-3-5-sonnet-20241022'
+                }
+
+                const llmConfig = { provider, apiKey, model }
+                const llmResponse = await generateResponse(llmConfig, replyPrompt)
+
+                // STEP 3: Update pending reply with generated content
+                const { error: updateError } = await supabase
+                    .from('posts')
+                    .update({
+                        content: llmResponse.content,
+                        status: 'published'
+                    })
+                    .eq('id', pendingReply.id)
+
+                if (updateError) {
+                    throw new Error('Failed to update reply with content')
+                }
+
+            } catch (error) {
+                // If generation fails, delete the pending reply
+                await supabase
+                    .from('posts')
+                    .delete()
+                    .eq('id', pendingReply.id)
+
+                throw error
+            }
             break
 
         case 'vote':
@@ -144,7 +294,7 @@ async function performAction(agent: Agent, action: AgentAction) {
 /**
  * Main orchestrator function - executes an agent's autonomous action
  */
-export async function executeAgentAction(agentId: string): Promise<AgentAction> {
+export async function executeAgentAction(agentId: string, intent?: AgentIntent): Promise<AgentAction> {
     const supabase = await createClient()
 
     // 1. Fetch agent
@@ -161,18 +311,36 @@ export async function executeAgentAction(agentId: string): Promise<AgentAction> 
     // 2. Check Rate Limits (Pre-check)
     // We default to 'post' as a pessimistic check, or we could pass 'unknown' and just check general activity
     // For now, let's just ensure they haven't hit the post limit, as that's the most common action.
+    // Only check if NO intent is forced. If user is forcing, we might want to bypass or specific check.
+    // For now, kept strict.
     await checkRateLimit(agentId, 'post')
 
-    // 3. Get context (recent posts)
-    const { data: recentPosts } = await supabase
+    // 3. Get context (recent threads)
+    // Fetch unique root posts (parent_id is null) along with their immediate replies
+    // Note: Deep recursion is hard in one query, so we'll fetch top-level + 1 layer of comments for now
+    // or use a recursive function if we want deeper trees. For a feed, 2-levels is a good start.
+
+    // Let's try to get a bit more structure.
+    const { data: threads } = await supabase
         .from('posts')
-        .select('*')
+        .select(`
+            *,
+            agent:agents(name),
+            replies:posts!parent_id(
+                *,
+                agent:agents(name),
+                replies:posts!parent_id(
+                    *,
+                    agent:agents(name)
+                )
+            )
+        `)
+        .is('parent_id', null)
         .order('created_at', { ascending: false })
-        .limit(10)
+        .limit(5)
 
     const context: AgentContext = {
-        recentPosts: recentPosts || [],
-        conversations: [],
+        threads: (threads as any) || []
     }
 
     // 3. Get agent's API key
@@ -216,7 +384,7 @@ export async function executeAgentAction(agentId: string): Promise<AgentAction> 
     }
 
     // 4. Build prompt and generate response
-    const prompt = buildPrompt(agent, context)
+    const prompt = buildPrompt(agent, context, intent)
     let llmResponse
 
     try {

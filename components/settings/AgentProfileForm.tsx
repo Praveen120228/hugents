@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ApiKeySelector } from '@/components/agents/ApiKeySelector'
 
 interface AgentProfileFormProps {
     initialData: {
@@ -14,7 +15,16 @@ interface AgentProfileFormProps {
         name: string
         personality: string
         model: string
+        apiKeyId?: string | null
     }
+}
+
+// Helper to determine provider from model
+function getProviderFromModel(model: string): 'anthropic' | 'openai' | 'gemini' | 'openrouter' {
+    if (model.startsWith('gpt') || model.startsWith('o1')) return 'openai'
+    if (model.startsWith('gemini')) return 'gemini'
+    if (model.includes('/')) return 'openrouter'
+    return 'anthropic'
 }
 
 export function AgentProfileForm({ initialData }: AgentProfileFormProps) {
@@ -26,8 +36,18 @@ export function AgentProfileForm({ initialData }: AgentProfileFormProps) {
     const [formData, setFormData] = useState({
         name: initialData.name,
         personality: initialData.personality,
-        model: initialData.model || 'claude-3-5-sonnet-20240620'
+        model: initialData.model || 'claude-3-5-sonnet-20240620',
+        apiKeyId: initialData.apiKeyId || undefined
     })
+
+    const [provider, setProvider] = useState<'anthropic' | 'openai' | 'gemini' | 'openrouter'>(
+        getProviderFromModel(initialData.model || 'claude-3-5-sonnet-20240620')
+    )
+
+    // Update provider when model changes
+    useEffect(() => {
+        setProvider(getProviderFromModel(formData.model))
+    }, [formData.model])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -119,6 +139,18 @@ export function AgentProfileForm({ initialData }: AgentProfileFormProps) {
                     </div>
 
                     <div className="space-y-2">
+                        <Label>API Key</Label>
+                        <ApiKeySelector
+                            provider={provider}
+                            selectedKeyId={formData.apiKeyId}
+                            onSelect={({ apiKeyId }) => setFormData(prev => ({ ...prev, apiKeyId }))}
+                        />
+                        <p className="text-sm text-muted-foreground">
+                            Select the API key for the chosen provider ({provider}).
+                        </p>
+                    </div>
+
+                    <div className="space-y-2">
                         <Label htmlFor="personality">Personality & System Prompt</Label>
                         <Textarea
                             id="personality"
@@ -152,6 +184,6 @@ export function AgentProfileForm({ initialData }: AgentProfileFormProps) {
                     </div>
                 </form>
             </CardContent>
-        </Card>
+        </Card >
     )
 }

@@ -368,6 +368,77 @@ export type Database = {
           },
         ]
       }
+      user_interactions: {
+        Row: {
+          id: string
+          user_id: string
+          post_id: string
+          interaction_type: 'view' | 'hover' | 'click'
+          duration_ms: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          post_id: string
+          interaction_type: 'view' | 'hover' | 'click'
+          duration_ms?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          post_id?: string
+          interaction_type?: 'view' | 'hover' | 'click'
+          duration_ms?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_interactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_interactions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      user_interests: {
+        Row: {
+          user_id: string
+          topic: string
+          score: number
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          topic: string
+          score?: number
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          topic?: string
+          score?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_interests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       posts: {
         Row: {
           agent_id: string | null
@@ -380,6 +451,8 @@ export type Database = {
           thread_id: string
           depth: number
           community_id: string | null
+          total_view_duration_ms: number | null
+          view_count: number | null
         }
         Insert: {
           agent_id?: string | null
@@ -392,6 +465,8 @@ export type Database = {
           thread_id?: string
           depth?: number
           community_id?: string | null
+          total_view_duration_ms?: number | null
+          view_count?: number | null
         }
         Update: {
           agent_id?: string | null
@@ -404,6 +479,8 @@ export type Database = {
           thread_id?: string
           depth?: number
           community_id?: string | null
+          total_view_duration_ms?: number | null
+          view_count?: number | null
         }
         Relationships: [
           {
@@ -438,21 +515,24 @@ export type Database = {
       }
       votes: {
         Row: {
-          agent_id: string
+          agent_id: string | null
+          profile_id: string | null
           created_at: string | null
           id: string
           post_id: string
           vote_type: string
         }
         Insert: {
-          agent_id: string
+          agent_id?: string | null
+          profile_id?: string | null
           created_at?: string | null
           id?: string
           post_id: string
           vote_type: string
         }
         Update: {
-          agent_id?: string
+          agent_id?: string | null
+          profile_id?: string | null
           created_at?: string | null
           id?: string
           post_id?: string
@@ -473,6 +553,13 @@ export type Database = {
             referencedRelation: "posts"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "votes_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
         ]
       }
     }
@@ -480,7 +567,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_post_metrics: {
+        Args: {
+          p_id: string
+          duration: number
+        }
+        Returns: void
+      }
     }
     Enums: {
       [_ in never]: never

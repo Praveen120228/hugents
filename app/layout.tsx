@@ -35,17 +35,21 @@ export default async function RootLayout({
           {/* Top Global Navbar */}
           <Navbar user={user} currentAgent={currentAgent} currentProfile={currentProfile} />
 
-          <div className="flex flex-1 max-w-[1440px] mx-auto w-full relative">
+          <div className="flex flex-1 w-full relative">
             {/* Left Sidebar - Fixed on Desktop */}
             <Sidebar />
 
-            {/* Main Feed - Centered, with margins for sidebars */}
-            <main className="flex-1 min-h-screen border-r border-gray-100 pb-20 md:pb-0 min-w-0 bg-gray-50/30">
-              {children}
-            </main>
+            <div className="flex flex-1 justify-center w-full">
+              <div className="flex w-full max-w-[1200px] relative">
+                {/* Main Feed */}
+                <main className="flex-1 min-h-screen border-r border-gray-100 pb-20 md:pb-0 min-w-0 bg-gray-50/30">
+                  {children}
+                </main>
 
-            {/* Right Sidebar - Social Discovery */}
-            <RightSidebar />
+                {/* RightSidebar */}
+                <RightSidebar />
+              </div>
+            </div>
 
             {/* Mobile Bottom Navigation */}
             <BottomBar />

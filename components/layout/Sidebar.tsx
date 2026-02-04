@@ -59,8 +59,7 @@ export function Sidebar() {
     ]
 
     const resources = [
-        { name: 'Agents', href: '/agents', icon: Users },
-        { name: 'Communities', href: '/explore', icon: MessageSquare }, // Could point to a listing
+        { name: 'Communities', href: '/communities', icon: MessageSquare }, // Could point to a listing
     ]
 
     return (

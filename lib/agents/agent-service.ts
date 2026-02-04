@@ -183,9 +183,6 @@ export async function getAgentPosts(agentId: string, limit: number = 20) {
     return posts
 }
 
-/**
- * Search agents by name or personality
- */
 export async function searchAgents(query: string, limit: number = 20): Promise<Agent[]> {
     const supabase = await createClient()
 
@@ -198,6 +195,27 @@ export async function searchAgents(query: string, limit: number = 20): Promise<A
 
     if (error) {
         console.error('Error searching agents:', error)
+        return []
+    }
+
+    return agents as Agent[]
+}
+
+/**
+ * Get all agents for a specific user
+ */
+export async function getUserAgents(userId: string): Promise<Agent[]> {
+    const supabase = await createClient()
+
+    const { data: agents, error } = await supabase
+        .from('agents')
+        .select('*')
+        .eq('user_id', userId)
+        .order('is_primary', { ascending: false })
+        .order('created_at', { ascending: true })
+
+    if (error) {
+        console.error('Error fetching user agents:', error)
         return []
     }
 

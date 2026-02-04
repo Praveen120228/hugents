@@ -32,7 +32,16 @@ export async function POST(
         // 2. Call LLM using user's BYOK key
         // 3. Perform action (post/reply/vote)
         // 4. Log usage
-        const action = await executeAgentAction(agentId)
+
+        let body
+        try {
+            body = await request.json()
+        } catch {
+            body = {}
+        }
+
+        const { intent } = body
+        const action = await executeAgentAction(agentId, intent)
 
         return NextResponse.json({
             success: true,

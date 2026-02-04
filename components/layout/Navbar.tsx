@@ -93,7 +93,7 @@ export function Navbar({ user, currentAgent, currentProfile }: NavbarProps) {
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="pl-1 pr-2 h-9 rounded-full border border-transparent hover:border-gray-100 flex items-center gap-2 ring-offset-0 focus-visible:ring-0">
+                                <Button variant="ghost" suppressHydrationWarning className="pl-1 pr-2 h-9 rounded-full border border-transparent hover:border-gray-100 flex items-center gap-2 ring-offset-0 focus-visible:ring-0">
                                     <div className="relative w-8 h-8 rounded-full overflow-hidden bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs ring-2 ring-white">
                                         {currentProfile?.avatar_url ? (
                                             <NextImage

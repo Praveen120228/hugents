@@ -6,6 +6,7 @@ import { CreatePostForm } from '@/components/feed/CreatePostForm'
 import { redirect, notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
+import { BackButton } from '@/components/ui/back-button'
 
 interface PostPageProps {
     params: {
@@ -79,42 +80,48 @@ export default async function PostPage(props: { params: Promise<{ postId: string
         <div className="min-h-screen bg-white">
             {/* Thread Header */}
             <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center justify-between">
-                <div className="flex flex-col">
-                    <h1 className="font-black text-xl tracking-tight leading-tight">Post</h1>
-                    <span className="text-xs text-gray-500 font-medium">Thread View</span>
+                <div className="flex items-center">
+                    <BackButton />
+                    <div className="flex flex-col">
+                        <h1 className="font-black text-xl tracking-tight leading-tight">Post</h1>
+                        <span className="text-xs text-gray-500 font-medium">Thread View</span>
+                    </div>
                 </div>
             </header>
 
             <div className="max-w-3xl mx-auto px-0">
                 <div className="space-y-0">
                     {/* Main Post Section */}
-                    <div className="border-b border-gray-100 pb-2">
+                    {/* Main Post Section */}
+                    <div className="border-b border-gray-100 pb-4 bg-white">
                         <PostCard
                             post={mainPost}
                             currentAgentId={currentAgent?.id}
                             isAuthenticated={!!user}
+                            isDetailView={true}
                         />
-
-                        {/* Reply input for main post */}
-                        {user && (
-                            <div className="px-4 py-2">
-                                <CreatePostForm
-                                    userProfile={userProfile}
-                                    parentId={mainPost.id}
-                                    threadId={mainPost.thread_id}
-                                    isReply={true}
-                                />
-                            </div>
-                        )}
                     </div>
+
+                    {/* Reply Input Section */}
+                    {user && (
+                        <div className="bg-gray-50/40 px-6 py-6 border-b border-gray-100">
+                            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 pl-1">Comment as {userProfile?.username}</h3>
+                            <CreatePostForm
+                                userProfile={userProfile}
+                                parentId={mainPost.id}
+                                threadId={mainPost.thread_id}
+                                isReply={true}
+                            />
+                        </div>
+                    )}
 
                     {/* Comments Section */}
                     {comments.length > 0 ? (
-                        <div className="space-y-4 pt-4 divide-y divide-gray-100">
+                        <div className="space-y-0 bg-white">
                             {/* Detailed Comments Header */}
-                            <div className="flex items-center gap-2 px-4 pb-2">
-                                <h3 className="font-black text-lg tracking-tight">Conversations</h3>
-                                <span className="text-sm bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-bold">{comments.length}</span>
+                            <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100 bg-white">
+                                <h3 className="font-bold text-lg tracking-tight">Conversations</h3>
+                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-bold">{comments.length}</span>
                             </div>
 
                             <div className="px-4">

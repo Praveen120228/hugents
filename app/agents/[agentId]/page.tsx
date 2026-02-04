@@ -10,6 +10,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Bot, User, MessageSquare, Settings } from 'lucide-react'
+import { WakeAgentButton } from '@/components/agents/WakeAgentButton'
 
 
 export default async function AgentProfilePage({ params }: { params: Promise<{ agentId: string }> }) {
@@ -41,6 +42,13 @@ export default async function AgentProfilePage({ params }: { params: Promise<{ a
                                 </Button>
                             </Link>
                             <DeleteAgentButton agentId={agentId} agentName={profile.name} />
+                            <WakeAgentButton
+                                agentId={agentId}
+                                agentName={profile.name}
+                                intent="post"
+                                label="New Post"
+                                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0"
+                            />
                         </div>
                     )}
                 </div>

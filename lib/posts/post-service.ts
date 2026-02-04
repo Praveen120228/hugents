@@ -8,7 +8,8 @@ type Vote = Database['public']['Tables']['votes']['Row']
 export interface Post {
     id: string
     agent_id: string
-    content: string
+    content: string | null
+    status?: string | null
     parent_id: string | null
     controversy_score: number | null
     thread_id: string
@@ -28,6 +29,10 @@ export interface Post {
         post_id: string
         created_at: string | null
     }>
+    reply_count?: number
+    total_view_duration_ms?: number
+    view_count?: number
+    engagement_score?: number
 }
 
 /**
@@ -53,11 +58,14 @@ export const getPosts = cache(async (limit: number = 50, sortBy: 'new' | 'hot' |
 
     let query = supabase
         .from('posts')
+        // Fetch total thread count (includes the post itself if thread_id is self-referencing)
+        // We use thread_id foreign key relation to get all posts in the thread
         .select(`
       *,
       agent:agents(*),
       profile:profiles(*),
-      votes(*)
+      votes(*),
+      thread_items:posts!thread_id(count)
     `)
         .is('parent_id', null)
         .limit(limit)
@@ -89,11 +97,52 @@ export const getPosts = cache(async (limit: number = 50, sortBy: 'new' | 'hot' |
     const { data: posts, error } = await query
 
     if (error) {
-        console.error('Error fetching posts:', error)
+        console.error('Error fetching posts:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+        })
         return []
     }
 
-    let processedPosts = posts as Post[]
+    let processedPosts = posts.map((p: any) => ({
+        ...p,
+        // thread_items count includes the post itself because thread_id = id for root posts
+        // So we subtract 1. If count is 0 or undefined, default to 0.
+        reply_count: Math.max(0, (p.thread_items?.[0]?.count || 1) - 1)
+    })) as Post[]
+
+    // Calculate engagement scores for 'hot' and 'best' logic
+    const calculateEngagementScore = (p: Post) => {
+        const upvotes = p.votes.filter(v => v.vote_type === 'up').length
+        const downvotes = p.votes.filter(v => v.vote_type === 'down').length
+        const voteScore = upvotes - downvotes
+        const replies = p.reply_count || 0
+        const viewDuration = p.total_view_duration_ms || 0
+
+        // Weights
+        const wDuration = 0.5   // Log scale of view duration
+        const wReplies = 2.0    // Heavy weight on discussion
+        const wVotes = 1.0      // Standard weight on votes
+
+        // Log scales to dampen outliers
+        const durationScore = Math.log(Math.max(viewDuration, 1) / 1000 + 1) * wDuration
+        const replyScore = replies * wReplies
+
+        // Base score
+        let score = durationScore + replyScore + (voteScore * wVotes)
+
+        // Add randomness (±10% jitter) to keep feed fresh
+        const randomFactor = 1 + (Math.random() * 0.2 - 0.1)
+
+        return score * randomFactor
+    }
+
+    processedPosts = processedPosts.map(p => ({
+        ...p,
+        engagement_score: calculateEngagementScore(p)
+    }))
 
     // For 'top' and 'hot', we need to sort in memory
     if (sortBy === 'top') {
@@ -103,20 +152,31 @@ export const getPosts = cache(async (limit: number = 50, sortBy: 'new' | 'hot' |
             return bScore - aScore
         })
     } else if (sortBy === 'hot') {
+        // "Best" / Hot algo using our new Engagement Score
         processedPosts = processedPosts.sort((a, b) => {
-            const aUpvotes = a.votes.filter(v => v.vote_type === 'up').length
-            const aDownvotes = a.votes.filter(v => v.vote_type === 'down').length
-            const aControversy = a.controversy_score || 0
-            const aAge = a.created_at ? (Date.now() - new Date(a.created_at).getTime()) / (1000 * 60 * 60) : 999
-            const aHotScore = (aControversy * 0.5) + ((aUpvotes - aDownvotes) * 0.3) - (aAge * 0.2)
+            return (b.engagement_score || 0) - (a.engagement_score || 0)
+        })
+    } else if (sortBy === 'new') {
+        // For "New", we might still want a slight quality push for very recent items if requested,
+        // but typically "New" means strict time. The user asked for "New filter... which also uses the algo".
+        // So we interpret this as: Fetch RECENT posts, then rank them by quality.
+        // We already fetched by 'created_at' desc from DB.
+        // Let's re-sort the fetched batch (which is already the newest 50) by engagement.
+        processedPosts = processedPosts.sort((a, b) => {
+            // giving more weight to recency for the "New" tab, but letting high engagement shine
+            const timeWeightA = new Date(a.created_at!).getTime()
+            const timeWeightB = new Date(b.created_at!).getTime()
 
-            const bUpvotes = b.votes.filter(v => v.vote_type === 'up').length
-            const bDownvotes = b.votes.filter(v => v.vote_type === 'down').length
-            const bControversy = b.controversy_score || 0
-            const bAge = b.created_at ? (Date.now() - new Date(b.created_at).getTime()) / (1000 * 60 * 60) : 999
-            const bHotScore = (bControversy * 0.5) + ((bUpvotes - bDownvotes) * 0.3) - (bAge * 0.2)
+            // Normalize time to hours
+            const hour = 1000 * 60 * 60
+            const hoursA = timeWeightA / hour
+            const hoursB = timeWeightB / hour
 
-            return bHotScore - aHotScore
+            // Combined score: Hours + Engagement
+            // Engagement is usually 0-50 range. Time is huge. 
+            // We need to scale engagement to be comparable to hours or vice versa.
+            // Let's just sort by engagement within the "recent" bucket we just fetched.
+            return (b.engagement_score || 0) - (a.engagement_score || 0)
         })
     }
 
@@ -226,19 +286,33 @@ export async function createPost(
     return data
 }
 
-export async function voteOnPost(postId: string, agentId: string, voteType: 'up' | 'down') {
+export async function voteOnPost(postId: string, agentId: string | null, voteType: 'up' | 'down', profileId?: string) {
     const supabase = await createClient()
 
-    // Check if vote already exists
-    const { data: existingVote } = await supabase
+    // Check if vote already exists for this agent OR profile
+    let query = supabase
         .from('votes')
         .select('*')
         .eq('post_id', postId)
-        .eq('agent_id', agentId)
-        .single()
+
+    if (agentId) {
+        query = query.eq('agent_id', agentId)
+    } else if (profileId) {
+        query = query.eq('profile_id', profileId)
+    } else {
+        throw new Error('Either agentId or profileId must be provided')
+    }
+
+    const { data: existingVote } = await query.single()
 
     if (existingVote) {
-        // Update existing vote
+        // Toggle Logic: If clicking the same vote type, delete it
+        if (existingVote.vote_type === voteType) {
+            await deleteVote(postId, agentId || undefined, profileId)
+            return
+        }
+
+        // Otherwise update existing vote
         const { error } = await supabase
             .from('votes')
             .update({ vote_type: voteType })
@@ -251,7 +325,8 @@ export async function voteOnPost(postId: string, agentId: string, voteType: 'up'
             .from('votes')
             .insert({
                 post_id: postId,
-                agent_id: agentId,
+                agent_id: agentId || null,
+                profile_id: profileId || null,
                 vote_type: voteType,
             })
 
@@ -262,14 +337,23 @@ export async function voteOnPost(postId: string, agentId: string, voteType: 'up'
     await updateControversyScore(postId)
 }
 
-export async function deleteVote(postId: string, agentId: string) {
+export async function deleteVote(postId: string, agentId?: string, profileId?: string) {
     const supabase = await createClient()
 
-    const { error } = await supabase
+    let query = supabase
         .from('votes')
         .delete()
         .eq('post_id', postId)
-        .eq('agent_id', agentId)
+
+    if (agentId) {
+        query = query.eq('agent_id', agentId)
+    } else if (profileId) {
+        query = query.eq('profile_id', profileId)
+    } else {
+        return // Nothing to delete
+    }
+
+    const { error } = await query
 
     if (error) throw new Error(error.message)
 

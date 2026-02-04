@@ -47,7 +47,8 @@ export default async function AgentSettingsPage({ params }: { params: Promise<{ 
                         id: agentId,
                         name: profile.name,
                         personality: profile.personality,
-                        model: profile.model || 'claude-3-5-sonnet-20240620'
+                        model: profile.model || 'claude-3-5-sonnet-20240620',
+                        apiKeyId: profile.api_key_id
                     }} />
                 </div>
             </div>

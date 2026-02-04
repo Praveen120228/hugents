@@ -1,19 +1,23 @@
 'use client'
 
-import { useState, ReactNode } from 'react'
+import { useState, useEffect, ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { InteractionGate } from './InteractionGate'
 import { formatDistanceToNow } from 'date-fns'
+import { useInteractionTracker } from '@/hooks/use-interaction-tracker'
 import Link from 'next/link'
 import NextImage from 'next/image'
-import { ArrowBigUp, ArrowBigDown, MessageSquare, Zap, Bot, User, Share, Award, MoreHorizontal } from 'lucide-react'
+import { ArrowBigUp, ArrowBigDown, MessageSquare, Zap, Bot, User, Share, Award, MoreHorizontal, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { AgentReplyDialog } from './AgentReplyDialog'
 
 interface PostCardProps {
     post: {
         id: string
-        content: string
+        content: string | null
+        status?: string | null
         created_at: string | null
         controversy_score: number | null
         community?: {
@@ -36,45 +40,97 @@ interface PostCardProps {
         votes: Array<{
             id: string
             vote_type: 'up' | 'down'
-            agent_id: string
+            agent_id: string | null
+            profile_id?: string | null
         }>
+        reply_count?: number
     }
     currentAgentId?: string
+    userProfile?: any
     isAuthenticated: boolean
     isCompact?: boolean
+    isDetailView?: boolean
     onReply?: () => void
     collapseButton?: ReactNode
 }
 
-export function PostCard({ post, currentAgentId, isAuthenticated, isCompact = false, onReply, collapseButton }: PostCardProps) {
+export function PostCard({ post, currentAgentId, userProfile, isAuthenticated, isCompact = false, isDetailView = false, onReply, collapseButton }: PostCardProps) {
+    const router = useRouter()
     const [isVoting, setIsVoting] = useState(false)
 
+    // Calculate initial state from props
     const upvotes = post.votes.filter(v => v.vote_type === 'up').length
     const downvotes = post.votes.filter(v => v.vote_type === 'down').length
-    const score = upvotes - downvotes
-    const userVote = currentAgentId
-        ? post.votes.find(v => v.agent_id === currentAgentId)?.vote_type
+    const initialScore = upvotes - downvotes
+    const initialUserVote = (currentAgentId || userProfile?.id)
+        ? post.votes.find(v => (currentAgentId && v.agent_id === currentAgentId) || (userProfile?.id && v.profile_id === userProfile.id))?.vote_type || null
         : null
 
-    const handleVote = async (voteType: 'up' | 'down') => {
-        if (!isAuthenticated || !currentAgentId) return
+    // Optimistic state
+    const [optimisticScore, setOptimisticScore] = useState(initialScore)
+    const [optimisticUserVote, setOptimisticUserVote] = useState<string | null>(initialUserVote)
 
+    // Keep optimistic state in sync with props when they change
+    useEffect(() => {
+        setOptimisticScore(initialScore)
+        setOptimisticUserVote(initialUserVote)
+    }, [initialScore, initialUserVote])
+
+    const handleVote = async (e: React.MouseEvent, voteType: 'up' | 'down') => {
+        e.stopPropagation()
+        if (!isAuthenticated || (!currentAgentId && !userProfile?.id)) return
+
+        // Calculate next optimistic state
+        let nextVote: string | null = voteType
+        let scoreAdjustment = 0
+
+        if (optimisticUserVote === voteType) {
+            // Undo
+            nextVote = null
+            scoreAdjustment = voteType === 'up' ? -1 : 1
+        } else {
+            // New vote or Flip
+            scoreAdjustment = voteType === 'up' ? 1 : -1
+            if (optimisticUserVote === (voteType === 'up' ? 'down' : 'up')) {
+                // Flip needs double adjustment
+                scoreAdjustment *= 2
+            }
+        }
+
+        // Apply optimistic updates
+        const prevScore = optimisticScore
+        const prevVote = optimisticUserVote
+        setOptimisticScore(prevScore + scoreAdjustment)
+        setOptimisticUserVote(nextVote)
         setIsVoting(true)
+
         try {
+            const body: any = {
+                postId: post.id,
+                voteType,
+            }
+
+            if (currentAgentId) {
+                body.agentId = currentAgentId
+            } else if (userProfile?.id) {
+                body.profileId = userProfile.id
+            }
+
             const response = await fetch('/api/posts/vote', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    postId: post.id,
-                    agentId: currentAgentId,
-                    voteType,
-                }),
+                body: JSON.stringify(body),
             })
 
             if (!response.ok) throw new Error('Failed to vote')
-            window.location.reload()
+
+            // Trigger server refresh to sync data
+            router.refresh()
         } catch (error) {
             console.error('Error voting:', error)
+            // Rollback on error
+            setOptimisticScore(prevScore)
+            setOptimisticUserVote(prevVote)
         } finally {
             setIsVoting(false)
         }
@@ -88,7 +144,7 @@ export function PostCard({ post, currentAgentId, isAuthenticated, isCompact = fa
     const cardContent = (
         <div className={cn(
             "flex flex-row gap-2 transition-all",
-            isCompact ? 'gap-2' : 'py-2 px-1 gap-3'
+            isCompact ? 'gap-1.5' : 'py-1 px-1 gap-2'
         )}>
             {/* Avatar */}
             <div className={cn(
@@ -116,7 +172,7 @@ export function PostCard({ post, currentAgentId, isAuthenticated, isCompact = fa
                 <div className="flex items-center gap-1.5 flex-wrap mb-1">
                     <div className="flex items-center gap-1 min-w-0">
                         {isAgent ? (
-                            <Link href={`/agents/${post.agent!.id}`} className="hover:underline flex items-center gap-1">
+                            <Link href={`/agents/${post.agent!.id}`} className="hover:underline flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                                 <h3 className={cn(
                                     "font-bold text-gray-900 leading-none",
                                     isCompact ? 'text-[13px]' : 'text-[15px]'
@@ -150,63 +206,89 @@ export function PostCard({ post, currentAgentId, isAuthenticated, isCompact = fa
 
                 {/* Content */}
                 <Link href={`/posts/${post.id}`} className="block">
-                    <p className={cn(
-                        "whitespace-pre-wrap text-gray-800 leading-snug",
-                        isCompact ? 'text-[14px]' : 'text-[15px]'
-                    )}>{post.content}</p>
+                    {post.status === 'generating' ? (
+                        <div className="flex items-center gap-2 text-sm text-gray-500 italic py-2">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Generating reply...</span>
+                        </div>
+                    ) : post.status === 'pending' ? (
+                        <div className="text-sm text-gray-500 italic py-2">
+                            Preparing to reply...
+                        </div>
+                    ) : (
+                        <p className={cn(
+                            "whitespace-pre-wrap text-gray-800 leading-snug",
+                            isCompact ? 'text-[14px]' : 'text-[15px]'
+                        )}>{post.content}</p>
+                    )}
                 </Link>
 
                 {/* Actions: (-) Vote Reply Award Share */}
-                <div className="flex items-center gap-4 mt-1.5 text-gray-500">
+                <div className="flex items-center gap-2 mt-1 text-gray-500">
                     <div className="flex items-center gap-2">
                         {collapseButton}
 
                         <div className="flex items-center gap-1 bg-black/[0.03] rounded-full px-1">
                             <button
-                                onClick={() => handleVote('up')}
+                                onClick={(e) => handleVote(e, 'up')}
                                 disabled={isVoting}
                                 className={cn(
                                     "p-1 rounded-full transition-colors",
-                                    userVote === 'up' ? "text-orange-600 bg-orange-50" : "hover:bg-black/5"
+                                    optimisticUserVote === 'up' ? "text-orange-600 bg-orange-50" : "hover:bg-black/5"
                                 )}
                             >
-                                <ArrowBigUp className={cn(userVote === 'up' ? "fill-orange-600" : "w-4 h-4")} />
+                                <ArrowBigUp className={cn(optimisticUserVote === 'up' ? "fill-orange-600" : "w-4 h-4")} />
                             </button>
-                            <span className="text-xs font-bold min-w-[0.5rem] text-center">{score}</span>
+                            <span className="text-xs font-bold min-w-[0.5rem] text-center">{optimisticScore}</span>
                             <button
-                                onClick={() => handleVote('down')}
+                                onClick={(e) => handleVote(e, 'down')}
                                 disabled={isVoting}
                                 className={cn(
                                     "p-1 rounded-full transition-colors",
-                                    userVote === 'down' ? "text-blue-600 bg-blue-50" : "hover:bg-black/5"
+                                    optimisticUserVote === 'down' ? "text-blue-600 bg-blue-50" : "hover:bg-black/5"
                                 )}
                             >
-                                <ArrowBigDown className={cn(userVote === 'down' ? "fill-blue-600" : "w-4 h-4")} />
+                                <ArrowBigDown className={cn(optimisticUserVote === 'down' ? "fill-blue-600" : "w-4 h-4")} />
                             </button>
                         </div>
                     </div>
 
-                    <button
-                        onClick={onReply}
-                        className="flex items-center gap-1.5 text-[12px] font-semibold hover:bg-black/5 px-2 py-1 rounded transition-colors"
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); onReply?.(); }}
+                        className="h-6 px-1.5 gap-1 rounded-md text-gray-500 hover:text-purple-600 hover:bg-purple-50"
                     >
                         <MessageSquare className="w-4 h-4" />
-                        Reply
-                    </button>
+                        {post.reply_count !== undefined && post.reply_count > 0 && (
+                            <span className="text-xs">{post.reply_count}</span>
+                        )}
+                    </Button>
 
-                    <button className="flex items-center gap-1.5 text-[12px] font-semibold hover:bg-black/5 px-2 py-1 rounded transition-colors">
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 rounded-full text-gray-500 hover:text-purple-600 hover:bg-purple-50" onClick={(e) => e.stopPropagation()}>
                         <Award className="w-4 h-4" />
-                        Award
-                    </button>
+                    </Button>
 
-                    <button className="flex items-center gap-1.5 text-[12px] font-semibold hover:bg-black/5 px-2 py-1 rounded transition-colors">
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 rounded-full text-gray-500 hover:text-purple-600 hover:bg-purple-50" onClick={(e) => e.stopPropagation()}>
                         <Share className="w-4 h-4" />
-                        Share
-                    </button>
+                    </Button>
 
-                    <button className="p-1 hover:bg-black/5 rounded transition-colors">
-                        <MoreHorizontal className="w-4 h-4" />
-                    </button>
+                    {isAuthenticated && (
+                        <AgentReplyDialog
+                            postId={post.id}
+                            trigger={
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 rounded-full text-gray-500 hover:text-purple-600 hover:bg-purple-50"
+                                    title="Reply as Agent"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <Bot className="w-4 h-4" />
+                                </Button>
+                            }
+                        />
+                    )}
                 </div>
             </div>
         </div>
@@ -215,7 +297,7 @@ export function PostCard({ post, currentAgentId, isAuthenticated, isCompact = fa
     return (
         <div className={cn(
             "w-full px-4 transition-all duration-300",
-            isCompact ? 'py-2' : 'py-4'
+            isCompact ? 'py-1' : 'py-2'
         )}>
             {cardContent}
         </div>

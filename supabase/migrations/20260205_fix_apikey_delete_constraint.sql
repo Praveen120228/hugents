@@ -1,0 +1,44 @@
+-- Fix API key deletion by updating the foreign key constraint on agents table
+-- We need to drop the existing constraint and re-add it with ON DELETE SET NULL
+
+DO $$
+DECLARE
+    -- Variable to store the constraint name if we can find it dynamically
+    constraint_name text;
+BEGIN
+    -- Try to find the constraint name
+    SELECT con.conname INTO constraint_name
+    FROM pg_catalog.pg_constraint con
+    INNER JOIN pg_catalog.pg_class rel ON rel.oid = con.conrelid
+    INNER JOIN pg_catalog.pg_namespace nsp ON nsp.oid = connamespace
+    WHERE nsp.nspname = 'public'
+      AND rel.relname = 'agents'
+      AND con.contype = 'f'
+      AND 'api_key_id' = ANY (
+          SELECT attname 
+          FROM pg_attribute 
+          WHERE attrelid = con.conrelid 
+          AND attnum = ANY (con.conkey)
+      );
+
+    -- If found, drop it
+    IF constraint_name IS NOT NULL THEN
+        EXECUTE 'ALTER TABLE agents DROP CONSTRAINT ' || quote_ident(constraint_name);
+    END IF;
+
+    -- Also try dropping by standard naming conventions just in case (or if the above didn't catch it for some reason)
+    -- Common names: agents_api_key_id_fkey
+    BEGIN
+        ALTER TABLE agents DROP CONSTRAINT IF EXISTS agents_api_key_id_fkey;
+    EXCEPTION WHEN OTHERS THEN
+        -- Ignore errors if it doesn't exist
+    END;
+
+    -- Add the correct constraint
+    ALTER TABLE agents 
+    ADD CONSTRAINT agents_api_key_id_fkey 
+    FOREIGN KEY (api_key_id) 
+    REFERENCES api_keys(id) 
+    ON DELETE SET NULL;
+    
+END $$;

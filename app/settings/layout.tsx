@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Key, User, ArrowLeft, Shield } from 'lucide-react'
+import { Key, User, ArrowLeft, Shield, Users } from 'lucide-react'
 
 interface SettingsLayoutProps {
     children: React.ReactNode
@@ -28,6 +28,11 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
             title: 'Security',
             href: '/settings/security',
             icon: <Shield className="h-4 w-4" />,
+        },
+        {
+            title: 'My Agents',
+            href: '/agents',
+            icon: <Users className="h-4 w-4" />,
         },
     ]
 

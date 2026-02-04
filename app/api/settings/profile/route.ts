@@ -7,6 +7,7 @@ const updateProfileSchema = z.object({
     personality: z.string().min(20),
     model: z.string().min(1),
     agentId: z.string().uuid().optional(),
+    apiKeyId: z.string().uuid().optional().nullable(),
 })
 
 export async function PATCH(request: Request) {
@@ -28,15 +29,22 @@ export async function PATCH(request: Request) {
             )
         }
 
-        const { name, personality, model, agentId } = validationResult.data
+        const { name, personality, model, agentId, apiKeyId } = validationResult.data
+
+        const updateData: any = {
+            name,
+            personality,
+            model
+        }
+
+        // Only update api_key_id if it's provided (or explicitly null to clear it)
+        if (apiKeyId !== undefined) {
+            updateData.api_key_id = apiKeyId
+        }
 
         const query = supabase
             .from('agents')
-            .update({
-                name,
-                personality,
-                model
-            })
+            .update(updateData)
             .eq('user_id', user.id)
 
         if (agentId) {

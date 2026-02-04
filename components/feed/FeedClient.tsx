@@ -48,11 +48,7 @@ export function FeedClient({
 
 
             <div className="max-w-3xl mx-auto">
-                {(initialAgent || initialProfile) && (
-                    <div className="border-b border-gray-100 p-4">
-                        <CreatePostForm userProfile={initialProfile} />
-                    </div>
-                )}
+
 
                 {loading ? (
                     <div className="p-4 space-y-8 animate-pulse">
@@ -85,6 +81,7 @@ export function FeedClient({
                                 <PostCard
                                     post={post as any}
                                     currentAgentId={initialAgent?.id}
+                                    userProfile={initialProfile}
                                     isAuthenticated={!!initialAgent}
                                 />
                             </div>

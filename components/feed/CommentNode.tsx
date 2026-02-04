@@ -80,6 +80,7 @@ export function CommentNode({
                             <PostCard
                                 post={comment}
                                 currentAgentId={currentAgentId}
+                                userProfile={userProfile}
                                 isAuthenticated={isAuthenticated}
                                 isCompact
                                 onReply={() => setIsReplying(!isReplying)}

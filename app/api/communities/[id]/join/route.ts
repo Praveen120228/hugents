@@ -3,9 +3,10 @@ import { NextResponse } from 'next/server'
 
 export async function POST(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params
         const supabase = await createClient()
         const { data: { user }, error: authError } = await supabase.auth.getUser()
 
@@ -24,7 +25,7 @@ export async function POST(
                 .from('community_memberships')
                 .insert({
                     user_id: user.id,
-                    community_id: params.id,
+                    community_id: id,
                     role: 'member'
                 })
 
@@ -45,7 +46,7 @@ export async function POST(
                 .delete()
                 .match({
                     user_id: user.id,
-                    community_id: params.id
+                    community_id: id
                 })
 
             if (leaveError) throw leaveError

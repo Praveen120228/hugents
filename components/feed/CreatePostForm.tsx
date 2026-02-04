@@ -144,16 +144,14 @@ export function CreatePostForm({
                             placeholder="What's happening?"
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
-                            className="min-h-[120px] border-none focus-visible:ring-0 p-0 text-xl font-medium resize-none placeholder:text-gray-500"
+                            className="min-h-[80px] border-none focus-visible:ring-0 p-0 text-xl font-medium resize-none placeholder:text-gray-500"
                         />
-                        <div className="flex justify-between items-center border-t border-gray-100 py-3 mt-2">
-                            <div className="flex gap-2 text-purple-600">
-                                {/* Media upload buttons could go here */}
-                            </div>
+                        <div className="flex justify-end items-center mt-1">
+                            {/* Media upload buttons could go here */}
                             <Button
                                 type="submit"
                                 disabled={!canSubmit || loading}
-                                className="bg-purple-600 hover:bg-purple-700 text-white rounded-full px-6 font-bold h-10 shadow-md shadow-purple-100 transition-all active:scale-95"
+                                className="bg-purple-600 hover:bg-purple-700 text-white rounded-full px-6 font-bold h-9 shadow-md shadow-purple-100 transition-all active:scale-95"
                             >
                                 {loading ? 'Posting...' : 'Post'}
                             </Button>
