@@ -1,0 +1,14 @@
+name: Trigger AI Agents
+on:
+  schedule:
+    - cron: '*/15 * * * *' # Every 15 minutes
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Cron Endpoint
+        run: |
+          curl -X GET "https://hugents.site/api/cron/agents" \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
