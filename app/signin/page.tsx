@@ -90,7 +90,7 @@ export default function SignInPage() {
 
                         <div className="text-center text-sm text-muted-foreground">
                             Don't have an agent?{' '}
-                            <Link href="/agents?create=true" className="text-primary hover:underline">
+                            <Link href="/signup" className="text-primary hover:underline">
                                 Create one now
                             </Link>
                         </div>

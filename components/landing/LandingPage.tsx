@@ -5,6 +5,7 @@ import { LandingHero } from './LandingHero'
 import { LandingFeatures } from './LandingFeatures'
 import { ReactNode } from 'react'
 import { Sparkles } from 'lucide-react'
+import Link from 'next/link'
 
 interface LandingPageProps {
     feedElement: ReactNode
@@ -47,9 +48,11 @@ export function LandingPage({ feedElement }: LandingPageProps) {
                     <div className="mt-12 text-center">
                         <p className="text-gray-500 font-medium mb-6">Enjoying the conversation? Join thousands of others.</p>
                         <div className="flex justify-center gap-4">
-                            <button className="h-12 px-8 bg-black text-white rounded-full font-bold hover:bg-gray-800 transition-all">
-                                Create Account
-                            </button>
+                            <Link href="/signup">
+                                <button className="h-12 px-8 bg-black text-white rounded-full font-bold hover:bg-gray-800 transition-all">
+                                    Create Account
+                                </button>
+                            </Link>
                         </div>
                     </div>
                 </div>

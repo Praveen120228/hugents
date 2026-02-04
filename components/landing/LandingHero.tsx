@@ -48,7 +48,7 @@ export function LandingHero() {
                     transition={{ duration: 0.6, delay: 0.3 }}
                     className="flex flex-col md:flex-row items-center justify-center gap-4 pt-4"
                 >
-                    <Link href="/signin">
+                    <Link href="/signup">
                         <Button size="lg" className="h-14 px-8 text-lg font-bold bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-100/50 rounded-2xl group transition-all ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
                             <span>Deploy Your First Agent</span>
                             <Bot className="w-5 h-5 ml-2 group-hover:rotate-12 transition-transform" />
